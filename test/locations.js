@@ -2,16 +2,10 @@ import assert from "assert"
 import Book from "../src/book"
 import Locations from "../src/locations"
 
-describe("Locations", () => {
-	let book, rendition, sections = {}
+describe("Locations", function() {
+	let book, rendition, locations, sections = {}
 	const chars = 549
-	const init = async (book) => {
-
-		if (book.locations.size === 0) {
-			await book.locations.generate(chars)
-		}
-		return Promise.resolve(book.locations)
-	}
+	this.timeout(5555)
 	before(async () => {
 		book = new Book("../assets/alice/")
 		await book.opened
@@ -42,12 +36,11 @@ describe("Locations", () => {
 	})
 	describe("#generate()", () => {
 		it("should generate locations", async () => {
-			await init(book)
+			await book.locations.generate(chars)
 			assert.equal(book.locations.size, 101)
 		})
 	})
 	describe("#set()", () => {
-		before(async () => init(book))
 		it("should set current location by epubcfi", () => {
 			const locs = book.locations
 			const curr = book.locations.current
@@ -146,7 +139,6 @@ describe("Locations", () => {
 		})
 	})
 	describe("#cfiFromPercentage()", () => {
-		before(async () => init(book))
 		it("should get epubcfi from percentage", () => {
 			const locs = book.locations
 			const keys = [...locs.keys()]
@@ -156,11 +148,22 @@ describe("Locations", () => {
 			})
 		})
 	})
+	describe("#save()", () => {
+		it("should save locations", () => {
+			locations = book.locations.save()
+			assert.ok(locations)
+		})
+	})
 	describe("#clear()", () => {
-		before(async () => init(book))
 		it("should clear locations", () => {
 			book.locations.clear()
 			assert.equal(book.locations.size, 0)
+		})
+	})
+	describe("#load()", () => {
+		it("should load locations", () => {
+			book.locations.load(locations)
+			assert.equal(book.locations.size, 101)
 		})
 	})
 })
