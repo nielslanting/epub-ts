@@ -97,7 +97,7 @@ class Locations extends Map {
 
 	/**
 	 * process
-	 * @param {Section} section 
+	 * @param {Section} section
 	 * @returns {Promise<Locations>}
 	 */
 	async process(section) {
@@ -109,8 +109,8 @@ class Locations extends Map {
 
 	/**
 	 * parse
-	 * @param {Element} contents 
-	 * @param {string} cfiBase 
+	 * @param {Element} contents
+	 * @param {string} cfiBase
 	 * @param {number} [chars]
 	 * @returns {Promise<Locations>}
 	 */
@@ -203,8 +203,8 @@ class Locations extends Map {
 
 	/**
 	 * treeWalker
-	 * @param {Node} root 
-	 * @param {function} func 
+	 * @param {Node} root
+	 * @param {function} func
 	 * @returns {Promise<any>}
 	 * @private
 	 */
@@ -310,7 +310,7 @@ class Locations extends Map {
 		if (typeof locations === "string") {
 			this.clear();
 			const data = JSON.parse(locations);
-			data.items.forEach(i => this.set(i.cfi, i));
+			data.items.forEach(i => this.set(i.cfi, new Location().set(i)));
 			this.break = data.break;
 			this.pause = data.pause;
 			this.current.set(this.get(data.idref));
