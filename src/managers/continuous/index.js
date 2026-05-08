@@ -42,7 +42,8 @@ class ContinuousViewManager extends DefaultViewManager {
 			offset: 500,
 			offsetDelta: 250,
 			ignoreClass: "",
-			forceEvenPages: false
+			forceEvenPages: false,
+			afterScrolledTimeout: 10
 		}, options || {});
 	}
 
@@ -141,7 +142,13 @@ class ContinuousViewManager extends DefaultViewManager {
 
 			if (this.isVisible(view, delta, delta)) {
 				if (view.displayed) {
-					view.show();
+					// Avoid forcing iframe redraw on every scroll tick.
+					if (
+						(view.element && view.element.style.visibility !== "visible") ||
+						(view.iframe && view.iframe.style.visibility !== "visible")
+					) {
+						view.show();
+					}
 				} else {
 					const displayed = view.display(this.load)
 						.then((view) => {
@@ -149,6 +156,17 @@ class ContinuousViewManager extends DefaultViewManager {
 						});
 					promises.push(displayed);
 				}
+			} else {
+				// Keep offscreen views hidden during active scroll to avoid
+				// frequent iframe teardown / rebuild flicker around section edges.
+				if (
+					view.displayed &&
+					(view.element && view.element.style.visibility !== "hidden")
+				) {
+					view.hide();
+				}
+
+				this.scheduleTrim(350);
 			}
 		}
 
@@ -156,6 +174,81 @@ class ContinuousViewManager extends DefaultViewManager {
 			return Promise.all(promises);
 		} else {
 			return Promise.resolve(null);
+		}
+	}
+
+	/**
+	 * scheduleTrim
+	 * @param {number} [delay=250] 
+	 */
+	scheduleTrim(delay = 250) {
+		clearTimeout(this.trimTimeout);
+		this.trimTimeout = setTimeout(() => {
+			// Avoid trimming while momentum scroll is still active.
+			if ((this.scrollDeltaVert || 0) > 2 || (this.scrollDeltaHorz || 0) > 2) {
+				this.scheduleTrim(120);
+				return;
+			}
+			this.q.enqueue(this.trim.bind(this));
+		}, delay);
+	}
+
+	/**
+	 * trim
+	 * @returns {Promise<any>}
+	 */
+	trim() {
+		const task = new Defer();
+		const displayed = this.views.displayed();
+		if (displayed.length === 0) {
+			task.resolve();
+			return task.promise;
+		}
+		const first = displayed[0];
+		const last = displayed[displayed.length - 1];
+		const firstIndex = this.views.indexOf(first);
+		const lastIndex = this.views.indexOf(last);
+		const above = this.views.slice(0, firstIndex);
+		const below = this.views.slice(lastIndex + 1);
+
+		// Erase all but last above
+		for (let i = 0; i < above.length - 1; i++) {
+			this.erase(above[i], true);
+		}
+
+		// Erase all except first below
+		for (let j = 1; j < below.length; j++) {
+			this.erase(below[j], false);
+		}
+
+		task.resolve();
+		return task.promise;
+	}
+
+	/**
+	 * erase
+	 * @param {object} view 
+	 * @param {boolean} above 
+	 */
+	erase(view, above) {
+		const lsc = this.views.container;
+		const prevTop = lsc.scrollTop;
+		const prevLeft = lsc.scrollLeft;
+
+		const bounds = view.position(); // rect from view
+
+		this.views.remove(view);
+
+		if (above) {
+			if (this.layout.axis === "vertical") {
+				this.scrollTo(prevLeft, prevTop - bounds.height, true);
+			} else {
+				if (this.layout.direction === "rtl") {
+					this.scrollTo(prevLeft + Math.floor(bounds.width), prevTop, true);
+				} else {
+					this.scrollTo(prevLeft - Math.floor(bounds.width), prevTop, true);
+				}
+			}
 		}
 	}
 
@@ -187,7 +280,7 @@ class ContinuousViewManager extends DefaultViewManager {
 		const contentLength = vph ? lsc.scrollWidth : lsc.scrollHeight;
 		let offset = vph ? lsc.scrollLeft : lsc.scrollTop;
 
-		if (this.writingMode.indexOf(AXIS_H) === 0) {
+		if (this.writingMode && this.writingMode.indexOf(AXIS_H) === 0) {
 			// Scroll offset starts at width of element
 			if (rtl && this.scrollType === "default") {
 				offset = contentLength - visibleLength - offset;
@@ -227,10 +320,12 @@ class ContinuousViewManager extends DefaultViewManager {
 
 		if (promises.length) {
 			return Promise.all(promises).then(() => {
+				return this.check();
+			}).then(() => {
 				return this.update(delta);
 			});
 		} else {
-			return Promise.resolve(null);
+			return this.update(delta);
 		}
 	}
 
@@ -250,6 +345,35 @@ class ContinuousViewManager extends DefaultViewManager {
 				left: e.target.scrollLeft
 			});
 		});
+	}
+
+	/**
+	 * onscroll
+	 * @param {Event} e 
+	 * @override
+	 */
+	onscroll(e) {
+		const lsc = this.views.container;
+		const scrollTop = lsc.scrollTop;
+		const scrollLeft = lsc.scrollLeft;
+
+		if (!this.ignore) {
+			this.scrollend(e);
+		} else {
+			this.ignore = false;
+		}
+
+		this.scrollDeltaVert = (this.scrollDeltaVert || 0) + Math.abs(scrollTop - (this.prevScrollTop || 0));
+		this.scrollDeltaHorz = (this.scrollDeltaHorz || 0) + Math.abs(scrollLeft - (this.prevScrollLeft || 0));
+
+		this.prevScrollTop = scrollTop;
+		this.prevScrollLeft = scrollLeft;
+
+		clearTimeout(this.scrollTimeout);
+		this.scrollTimeout = setTimeout(() => {
+			this.scrollDeltaVert = 0;
+			this.scrollDeltaHorz = 0;
+		}, 150);
 	}
 
 	/**
@@ -303,6 +427,8 @@ class ContinuousViewManager extends DefaultViewManager {
 	 * @override
 	 */
 	destroy() {
+		clearTimeout(this.trimTimeout);
+		clearTimeout(this.scrollTimeout);
 
 		super.destroy();
 

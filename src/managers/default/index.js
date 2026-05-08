@@ -190,6 +190,11 @@ class DefaultViewManager {
 		}
 		const timeout = this.name === "default" ? 0 : 30;
 		this.scrollend = debounce(this.scrolled.bind(this), timeout);
+
+		this._onUnload = (e) => {
+			this.destroy();
+		};
+		window.addEventListener("unload", this._onUnload);
 	}
 
 	/**
@@ -199,14 +204,21 @@ class DefaultViewManager {
 	removeEventListeners() {
 
 		const lsc = this.views.container;
-		lsc.removeEventListener("scroll", this.onscroll.bind(this));
-		if ("onscrollend" in window) {
-			lsc.removeEventListener(
-				"scrollend",
-				this.onscrollend.bind(this)
-			);
+		if (lsc) {
+			lsc.removeEventListener("scroll", this.onscroll.bind(this));
+			if ("onscrollend" in window) {
+				lsc.removeEventListener(
+					"scrollend",
+					this.onscrollend.bind(this)
+				);
+			}
 		}
 		this.scrollend = undefined;
+
+		if (this._onUnload) {
+			window.removeEventListener("unload", this._onUnload);
+			this._onUnload = undefined;
+		}
 	}
 
 	/**
