@@ -4,8 +4,8 @@
   "description": "Parse and Renderer EPUB containers",
   "main": "lib/index.js",
   "type": "module",
-  "types": "types/index.d.ts",
-  "module": "src/index.js",
+  "types": "lib/index.d.ts",
+  "module": "src/index.ts",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/intity/epub-js.git"
